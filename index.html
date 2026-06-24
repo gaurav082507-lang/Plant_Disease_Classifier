@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plant Disease Classifier</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green-deep: #1a3a2a;
+    --green-mid:  #2d6a4f;
+    --green-lite: #52b788;
+    --cream:      #f8f4ee;
+    --amber:      #e9a825;
+    --red:        #c0392b;
+    --text:       #1c2b22;
+    --muted:      #6b7c6e;
+    --border:     #d4e4d9;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--green-deep);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header .leaf { font-size: 26px; }
+  header h1 {
+    font-family: 'DM Serif Display', serif;
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+  header span {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--green-lite);
+    background: rgba(82,183,136,0.15);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(82,183,136,0.3);
+  }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 56px 24px 40px;
+  }
+  .hero h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    color: var(--green-deep);
+    line-height: 1.15;
+    margin-bottom: 14px;
+  }
+  .hero p {
+    color: var(--muted);
+    font-size: 1rem;
+    max-width: 480px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ── Upload card ── */
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    max-width: 560px;
+    margin: 0 auto 40px;
+    overflow: hidden;
+    box-shadow: 0 2px 24px rgba(26,58,42,0.07);
+  }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    margin: 28px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--green-lite);
+    background: rgba(82,183,136,0.04);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon { font-size: 2.8rem; margin-bottom: 12px; }
+  .drop-zone h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .drop-zone p  { font-size: 0.85rem; color: var(--muted); }
+  .drop-zone .browse { color: var(--green-mid); text-decoration: underline; cursor: pointer; }
+
+  /* preview */
+  #preview-wrap { display: none; padding: 0 28px; margin-bottom: 4px; }
+  #preview-wrap img {
+    width: 100%; max-height: 260px; object-fit: cover;
+    border-radius: 10px; border: 1px solid var(--border);
+  }
+  #file-name { text-align: center; font-size: 0.8rem; color: var(--muted); margin: 8px 0 4px; }
+
+  /* button */
+  .btn-wrap { padding: 16px 28px 28px; }
+  #predict-btn {
+    width: 100%;
+    background: var(--green-mid);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  #predict-btn:hover:not(:disabled) { background: var(--green-deep); }
+  #predict-btn:active:not(:disabled) { transform: scale(0.98); }
+  #predict-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* spinner */
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Result ── */
+  #result { display: none; padding: 0 28px 28px; }
+
+  .result-top {
+    background: linear-gradient(135deg, var(--green-deep), var(--green-mid));
+    border-radius: 12px;
+    padding: 22px;
+    color: #fff;
+    margin-bottom: 16px;
+  }
+  .result-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; margin-bottom: 6px; }
+  .result-disease { font-family: 'DM Serif Display', serif; font-size: 1.5rem; line-height: 1.2; margin-bottom: 14px; }
+  .conf-bar-bg {
+    background: rgba(255,255,255,0.2);
+    border-radius: 999px; height: 8px; margin-bottom: 6px;
+  }
+  .conf-bar-fill {
+    background: var(--amber);
+    height: 8px; border-radius: 999px;
+    transition: width 0.8s cubic-bezier(.4,0,.2,1);
+    width: 0%;
+  }
+  .conf-text { font-size: 0.82rem; opacity: 0.85; }
+
+  /* status badge */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.72rem; font-weight: 600; padding: 3px 10px;
+    border-radius: 20px; margin-bottom: 10px;
+  }
+  .badge.healthy  { background: rgba(82,183,136,0.15); color: var(--green-mid); border: 1px solid rgba(82,183,136,0.3); }
+  .badge.diseased { background: rgba(192,57,43,0.1);   color: var(--red);       border: 1px solid rgba(192,57,43,0.2); }
+
+  /* top 5 */
+  .top5-title { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .top5-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.85rem; }
+  .top5-name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top5-pct  { font-weight: 600; color: var(--green-mid); min-width: 42px; text-align: right; }
+  .mini-bar-bg   { flex: 1; background: var(--border); border-radius: 999px; height: 5px; }
+  .mini-bar-fill { background: var(--green-lite); height: 5px; border-radius: 999px; }
+
+  /* error */
+  #error-box {
+    display: none;
+    background: rgba(192,57,43,0.08);
+    border: 1px solid rgba(192,57,43,0.2);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 0 28px 20px;
+    font-size: 0.88rem;
+    color: var(--red);
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  footer a { color: var(--green-mid); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="leaf">🌿</span>
+  <h1>PlantVillage Classifier</h1>
+  <span>EfficientNetB0 · 38 classes</span>
+</header>
+
+<section class="hero">
+  <h2>Detect plant diseases<br>from a single photo</h2>
+  <p>Upload a clear photo of a plant leaf. The AI will identify the disease or confirm it's healthy — instantly.</p>
+</section>
+
+<div class="card">
+  <!-- Drop zone -->
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept="image/*">
+    <div class="drop-icon">🍃</div>
+    <h3>Drop a leaf image here</h3>
+    <p>or <span class="browse">browse to upload</span> · JPG, PNG, WEBP</p>
+  </div>
+
+  <!-- Preview -->
+  <div id="preview-wrap">
+    <img id="preview-img" src="" alt="Preview">
+    <p id="file-name"></p>
+  </div>
+
+  <!-- Error -->
+  <div id="error-box"></div>
+
+  <!-- Result -->
+  <div id="result">
+    <div class="result-top">
+      <div id="status-badge"></div>
+      <div class="result-label">Detected condition</div>
+      <div class="result-disease" id="res-disease">—</div>
+      <div class="conf-bar-bg"><div class="conf-bar-fill" id="conf-bar"></div></div>
+      <div class="conf-text" id="res-conf">Confidence: —</div>
+    </div>
+    <div class="top5-title">Top 5 predictions</div>
+    <div id="top5-list"></div>
+  </div>
+
+  <!-- Button -->
+  <div class="btn-wrap">
+    <button id="predict-btn" disabled>
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-text">Select an image first</span>
+    </button>
+  </div>
+</div>
+
+<footer>
+  <div style="font-weight:600; color: var(--green-deep); font-size:0.88rem; margin-bottom:6px;">
+    <a href="https://www.linkedin.com/in/gaurav-gupta-79754a377" target="_blank" style="color: var(--green-deep); text-decoration:none;">
+      Gaurav Gupta
+    </a> &nbsp;·&nbsp; BIT Mesra &nbsp;·&nbsp; AIML
+  </div>
+  Powered by <a href="https://plant-disease-classifier-1-61nu.onrender.com" target="_blank">PlantVillage API</a> ·
+  Trained on <a href="https://www.kaggle.com/datasets/abdallahalidev/plantvillage-dataset" target="_blank">PlantVillage Dataset</a>
+</footer>
+
+<script>
+  const API = 'https://plant-disease-classifier-1-61nu.onrender.com';
+
+  const dropZone   = document.getElementById('drop-zone');
+  const fileInput  = document.getElementById('file-input');
+  const previewWrap= document.getElementById('preview-wrap');
+  const previewImg = document.getElementById('preview-img');
+  const fileName   = document.getElementById('file-name');
+  const predictBtn = document.getElementById('predict-btn');
+  const btnText    = document.getElementById('btn-text');
+  const spinner    = document.getElementById('spinner');
+  const resultDiv  = document.getElementById('result');
+  const errorBox   = document.getElementById('error-box');
+
+  let selectedFile = null;
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+  function handleFile(file) {
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    previewImg.src = url;
+    fileName.textContent = file.name;
+    previewWrap.style.display = 'block';
+    dropZone.style.display = 'none';
+    predictBtn.disabled = false;
+    btnText.textContent = 'Analyse leaf';
+    resultDiv.style.display = 'none';
+    errorBox.style.display = 'none';
+  }
+
+  predictBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    // Loading state
+    predictBtn.disabled = true;
+    spinner.style.display = 'block';
+    btnText.textContent = 'Analysing…';
+    resultDiv.style.display = 'none';
+    errorBox.style.display = 'none';
+
+    try {
+      const form = new FormData();
+      form.append('file', selectedFile);
+
+      const res  = await fetch(`${API}/predict`, { method: 'POST', body: form });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.detail || 'Prediction failed');
+
+      showResult(data);
+    } catch (err) {
+      errorBox.textContent = '⚠️ ' + (err.message || 'Could not reach the API. Try again.');
+      errorBox.style.display = 'block';
+    } finally {
+      spinner.style.display = 'none';
+      btnText.textContent = 'Analyse again';
+      predictBtn.disabled = false;
+    }
+  });
+
+  function showResult(data) {
+    const isHealthy = data.prediction.toLowerCase().includes('healthy');
+    const pct = (data.confidence * 100).toFixed(1);
+
+    // Badge
+    document.getElementById('status-badge').innerHTML = isHealthy
+      ? '<span class="badge healthy">✅ Healthy</span>'
+      : '<span class="badge diseased">⚠️ Disease detected</span>';
+
+    // Main result
+    document.getElementById('res-disease').textContent = data.prediction.replace(/_/g, ' ');
+    document.getElementById('res-conf').textContent = `Confidence: ${pct}%`;
+    setTimeout(() => { document.getElementById('conf-bar').style.width = pct + '%'; }, 50);
+
+    // Top 5
+    const top5 = document.getElementById('top5-list');
+    top5.innerHTML = '';
+    data.top5.forEach(item => {
+      const p = (item.confidence * 100).toFixed(1);
+      top5.innerHTML += `
+        <div class="top5-item">
+          <span class="top5-name">${item.class.replace(/_/g, ' ')}</span>
+          <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${p}%"></div></div>
+          <span class="top5-pct">${p}%</span>
+        </div>`;
+    });
+
+    resultDiv.style.display = 'block';
+  }
+</script>
+</body>
+</html>
