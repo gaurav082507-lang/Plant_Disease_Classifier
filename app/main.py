@@ -8,25 +8,21 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 import tensorflow as tf
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+# ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.getenv("MODEL_PATH", os.path.join(BASE_DIR, "models", "PlantVillage.h5"))
 CLASS_NAMES_PATH = os.getenv("CLASS_NAMES_PATH", os.path.join(BASE_DIR, "models", "class_names.json"))
-IMG_SIZE = 224   # EfficientNetB0 input size
+IMG_SIZE = 224
 
-# ── Custom objects needed to load the model ──────────────────────────────────
-# Your model was trained with TF 2.x augmentation layers.
-# We override RandomShear to handle the saved config gracefully.
-class CompatRandomShear(tf.keras.layers.Layer):
-    """Drop-in replacement for RandomShear at inference — just passes input through."""
+# ── Passthrough layer for ALL augmentation layers ─────────────────────────────
+# Your model was saved with custom augmentation layers that differ across
+# Keras versions. At inference time we just pass the image through unchanged.
+class PassThrough(tf.keras.layers.Layer):
+    """Identity layer — replaces any augmentation layer at inference."""
     def __init__(self, **kwargs):
-        kwargs.pop("x_factor", None)
-        kwargs.pop("y_factor", None)
-        kwargs.pop("fill_mode", None)
-        kwargs.pop("interpolation", None)
-        kwargs.pop("fill_value", None)
-        kwargs.pop("data_format", None)
-        super().__init__(**kwargs)
+        # Drop every kwarg that might cause validation errors
+        safe = {k: v for k, v in kwargs.items() if k in ("name", "trainable", "dtype")}
+        super().__init__(**safe)
 
     def call(self, inputs, training=False):
         return inputs
@@ -35,37 +31,50 @@ class CompatRandomShear(tf.keras.layers.Layer):
     def from_config(cls, config):
         return cls(**config)
 
+
 CUSTOM_OBJECTS = {
-    "RandomShear": CompatRandomShear,
+    "RandomHeight":   PassThrough,
+    "RandomWidth":    PassThrough,
+    "RandomFlip":     PassThrough,
+    "RandomRotation": PassThrough,
+    "RandomZoom":     PassThrough,
+    "RandomShear":    PassThrough,
+    "RandomContrast": PassThrough,
+    "RandomBrightness": PassThrough,
+    "RandomTranslation": PassThrough,
+    "Rescaling":      PassThrough,
 }
 
-# ── Load model & class names ─────────────────────────────────────────────────
+# ── Load model & class names ──────────────────────────────────────────────────
 print("⏳ Loading PlantVillage model...")
 model = None
 class_names = []
 
 def load_assets():
     global model, class_names
-    try:
-        model = tf.keras.models.load_model(MODEL_PATH, custom_objects=CUSTOM_OBJECTS)
-        print(f"✅ Model loaded  →  {MODEL_PATH}")
-    except Exception as e:
-        print(f"❌ Model load failed: {e}")
 
+    # Load class names first (always works)
     if os.path.exists(CLASS_NAMES_PATH):
         with open(CLASS_NAMES_PATH) as f:
             class_names = json.load(f)
         print(f"✅ {len(class_names)} classes loaded")
     else:
-        print("⚠️  class_names.json not found — falling back to generic labels")
         class_names = [f"Class_{i}" for i in range(38)]
+        print("⚠️  class_names.json not found — using generic labels")
+
+    # Try loading model with custom objects
+    try:
+        model = tf.keras.models.load_model(MODEL_PATH, custom_objects=CUSTOM_OBJECTS)
+        print(f"✅ Model loaded → {MODEL_PATH}")
+    except Exception as e:
+        print(f"❌ Model load failed: {e}")
 
 load_assets()
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Plant Disease Classifier",
-    description="Upload a plant leaf image to detect diseases using EfficientNetB0 trained on PlantVillage.",
+    description="Upload a plant leaf image to detect diseases using EfficientNetB0 trained on PlantVillage (38 classes).",
     version="1.0.0",
 )
 
@@ -93,10 +102,22 @@ def root():
         "docs": "/docs",
     }
 
+@app.get("/health", summary="Detailed health status")
+def health():
+    return {
+        "api": "ok",
+        "model": "loaded" if model is not None else "not loaded",
+        "classes_loaded": len(class_names),
+    }
+
+@app.get("/classes", summary="List all 38 plant/disease classes")
+def get_classes():
+    return {"total": len(class_names), "classes": class_names}
+
 @app.post("/predict", summary="Predict plant disease from a leaf image")
 async def predict(file: UploadFile = File(...)):
     if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded. Check models/PlantVillage.h5")
+        raise HTTPException(status_code=503, detail="Model not loaded. Check server logs.")
 
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Please upload a valid image (jpg/png/webp).")
@@ -124,16 +145,3 @@ async def predict(file: UploadFile = File(...)):
         "confidence_pct": f"{confidence * 100:.2f}%",
         "top5": top5,
     })
-
-@app.get("/classes", summary="List all 38 plant/disease classes")
-def get_classes():
-    return {"total": len(class_names), "classes": class_names}
-
-@app.get("/health", summary="Detailed health status")
-def health():
-    return {
-        "api": "ok",
-        "model": "loaded" if model is not None else "not loaded",
-        "model_path": MODEL_PATH,
-        "classes_loaded": len(class_names),
-    }
